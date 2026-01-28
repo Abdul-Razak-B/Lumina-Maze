@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌟 Lumina Maze</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{--sky:#87ceeb;--ground:#e0f2fe;--wall:#60a5fa;--text:#0f172a;}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(#87ceeb,#e0f2fe);font-family:system-ui,Arial;color:var(--text)}
+.game{width:95vw;max-width:560px}
+header{display:flex;justify-content:space-between;margin-bottom:6px}
+h1{font-size:20px;margin:0}
+#hud{font-size:13px}
+.stage{position:relative;height:380px;background:repeating-linear-gradient(45deg,#f0f9ff,#f0f9ff 20px,#e0f2fe 20px,#e0f2fe 40px);border:3px solid #38bdf8;border-radius:12px;overflow:hidden}
+.player{position:absolute;width:32px;height:48px;transition:left 0.05s, top 0.05s;}
+.enemy{position:absolute;width:32px;height:32px;border-radius:8px;background:linear-gradient(#f87171,#dc2626)}
+.enemy.fast{box-shadow:0 0 10px rgba(239,68,68,.8)}
+.enemy.teleport{background:linear-gradient(#a855f7,#7c3aed)}
+.wall{position:absolute;background:linear-gradient(#93c5fd,#3b82f6);border-radius:6px}
+.goal{position:absolute;background:#22c55e;border-radius:6px}
+.overlay{position:absolute;inset:0;background:rgba(255,255,255,.9);display:none;place-items:center;text-align:center;z-index:10}
+.overlay.show{display:grid}
+footer{text-align:center;font-size:12px;margin-top:6px;display:flex;justify-content:center;align-items:center;gap:12px}
+footer a{color:var(--text);text-decoration:none;font-size:14px;transition:color .2s;}
+footer a:hover{color:inherit;}
+footer a[href*="facebook"]:hover{color:#1877f2;}
+footer a[href*="instagram"]:hover{color:#e4405f;}
+footer a[href*="wa.me"]:hover{color:#25d366;}
+</style>
+</head>
+<body>
+<div class="game">
+<header>
+  <h1>🌟 Lumina Maze</h1>
+  <div id="hud">Level <span id="lvl">1</span> | ⏱ <span id="time">30</span></div>
+</header>
+<div class="stage" id="stage"></div>
+<div class="overlay" id="overlay"><h2 id="msg"></h2></div>
+<footer>
+  <span id="copyright"></span>
+  <a href="https://www.facebook.com/abdulrazak.00786" target="_blank"><i class="fab fa-facebook"></i></a>
+  <a href="https://www.instagram.com/abdulrazak.00786" target="_blank"><i class="fab fa-instagram"></i></a>
+  <a href="https://wa.me/923090609391" target="_blank"><i class="fab fa-whatsapp"></i></a>
+</footer>
+</div>
+<script>
+const stage=document.getElementById('stage');
+const overlay=document.getElementById('overlay');
+const msg=document.getElementById('msg');
+const lvlEl=document.getElementById('lvl');
+const timeEl=document.getElementById('time');
+const copyrightEl=document.querySelector('footer span');
+
+let level=1,timeLeft,player,enemies=[],timer,frame=0;
+const SIZE=32,SPEED=8;
+
+const year=new Date().getFullYear();
+copyrightEl.textContent=`© ${year} - Created by Abdul Razak`;
+
+function startLevel(){
+  stage.innerHTML=''; enemies=[];
+  player=makePlayer(10,10); stage.appendChild(player);
+  lvlEl.textContent=level;
+  timeLeft=Math.max(15,40-level*2); timeEl.textContent=timeLeft;
+  generateMaze(); spawnGoal(); spawnEnemies();
+  clearInterval(timer);
+  timer=setInterval(()=>{
+    timeLeft--; timeEl.textContent=timeLeft;
+    if(timeLeft<=0) end('Time Up!');
+  },1000);
+}
+
+function makePlayer(x,y){
+  const p=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  p.setAttribute('width','24'); p.setAttribute('height','48'); p.classList.add('player');
+  p.style.left=x+'px'; p.style.top=y+'px';
+
+  const head=document.createElementNS('http://www.w3.org/2000/svg','circle'); head.setAttribute('cx','12'); head.setAttribute('cy','8'); head.setAttribute('r','8'); head.setAttribute('fill','#ffcc99'); p.appendChild(head);
+  const body=document.createElementNS('http://www.w3.org/2000/svg','rect'); body.setAttribute('x','6'); body.setAttribute('y','16'); body.setAttribute('width','12'); body.setAttribute('height','20'); body.setAttribute('fill','#1e90ff'); p.appendChild(body);
+  const leftArm=document.createElementNS('http://www.w3.org/2000/svg','rect'); leftArm.setAttribute('x','0'); leftArm.setAttribute('y','16'); leftArm.setAttribute('width','6'); leftArm.setAttribute('height','16'); leftArm.setAttribute('fill','#ffcc99'); p.appendChild(leftArm);
+  const rightArm=document.createElementNS('http://www.w3.org/2000/svg','rect'); rightArm.setAttribute('x','18'); rightArm.setAttribute('y','16'); rightArm.setAttribute('width','6'); rightArm.setAttribute('height','16'); rightArm.setAttribute('fill','#ffcc99'); p.appendChild(rightArm);
+  const leftLeg=document.createElementNS('http://www.w3.org/2000/svg','rect'); leftLeg.setAttribute('x','6'); leftLeg.setAttribute('y','36'); leftLeg.setAttribute('width','6'); leftLeg.setAttribute('height','12'); leftLeg.setAttribute('fill','#000'); p.appendChild(leftLeg);
+  const rightLeg=document.createElementNS('http://www.w3.org/2000/svg','rect'); rightLeg.setAttribute('x','12'); rightLeg.setAttribute('y','36'); rightLeg.setAttribute('width','6'); rightLeg.setAttribute('height','12'); rightLeg.setAttribute('fill','#000'); p.appendChild(rightLeg);
+  p.limbs={leftArm,rightArm,leftLeg,rightLeg};
+  p.pos={x,y};
+  return p;
+}
+
+function animateWalk(){
+  frame=(frame+1)%4; const dir=(frame%2===0?4:-4);
+  if(player && player.limbs){
+    player.limbs.leftArm.setAttribute('y',16+dir);
+    player.limbs.rightArm.setAttribute('y',16-dir);
+    player.limbs.leftLeg.setAttribute('y',36-dir);
+    player.limbs.rightLeg.setAttribute('y',36+dir);
+  }
+  requestAnimationFrame(animateWalk);
+}
+
+function generateMaze(){for(let i=0;i<6+level;i++) stage.appendChild(make('wall',Math.random()*460,Math.random()*300,60,40));}
+function spawnGoal(){ stage.appendChild(make('goal',500,160,30,60)); }
+function spawnEnemies(){ if(level>1)spawnEnemy('slow'); if(level>3)spawnEnemy('fast'); if(level>6)spawnEnemy('teleport'); }
+function spawnEnemy(type){ const e=make('enemy '+type,420,220); e.dataset.type=type; enemies.push(e); stage.appendChild(e); }
+function make(c,x,y,w=SIZE,h=SIZE){ const e=document.createElement('div'); e.className=c; Object.assign(e.style,{position:'absolute',left:x+'px',top:y+'px',width:w+'px',height:h+'px'}); return e; }
+function rect(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+function blocked(x,y){ const box={x,y,w:SIZE,h:SIZE}; return [...stage.querySelectorAll('.wall')].some(w=>rect(box,{x:w.offsetLeft,y:w.offsetTop,w:w.offsetWidth,h:w.offsetHeight})); }
+function move(dx,dy){
+  if(!player) return;
+  const nx=Math.max(0,Math.min(stage.clientWidth-SIZE,player.pos.x+dx));
+  const ny=Math.max(0,Math.min(stage.clientHeight-SIZE,player.pos.y+dy));
+  if(!blocked(nx,player.pos.y)) player.pos.x=nx;
+  if(!blocked(player.pos.x,ny)) player.pos.y=ny;
+  player.style.left=player.pos.x+'px'; player.style.top=player.pos.y+'px';
+  stage.querySelectorAll('.goal').forEach(g=>{if(hit(player,g)) win();});
+}
+function hit(a,b){ return rect({x:a.pos.x,y:a.pos.y,w:SIZE,h:SIZE},{x:b.offsetLeft,y:b.offsetTop,w:b.offsetWidth,h:b.offsetHeight}); }
+function enemyLoop(){ enemies.forEach(e=>{ let dx=player.pos.x-e.offsetLeft; let dy=player.pos.y-e.offsetTop; const dist=Math.hypot(dx,dy)||1; let sp=e.dataset.type==='fast'?3:1.5; if(e.dataset.type==='teleport'&&Math.random()<.01){ e.style.left=Math.random()*460+'px'; e.style.top=Math.random()*300+'px'; } const nx=e.offsetLeft+dx/dist*sp; const ny=e.offsetTop+dy/dist*sp; if(!blocked(nx,e.offsetTop)) e.style.left=nx+'px'; if(!blocked(e.offsetLeft,ny)) e.style.top=ny+'px'; if(hit(player,e)) end('Caught by Enemy!'); }); requestAnimationFrame(enemyLoop); }
+function end(text){ clearInterval(timer); msg.textContent=text; overlay.classList.add('show'); setTimeout(()=>{overlay.classList.remove('show');startLevel();},1500); }
+function win(){ clearInterval(timer); level++; msg.textContent='Level Complete!'; overlay.classList.add('show'); setTimeout(()=>{overlay.classList.remove('show');startLevel();},1200); }
+window.addEventListener('keydown',e=>{ if(e.key==='w'||e.key==='ArrowUp')move(0,-SPEED); if(e.key==='s'||e.key==='ArrowDown')move(0,SPEED); if(e.key==='a'||e.key==='ArrowLeft')move(-SPEED,0); if(e.key==='d'||e.key==='ArrowRight')move(SPEED,0); });
+animateWalk(); enemyLoop(); startLevel();
+</script>
+</body>
+</html>
